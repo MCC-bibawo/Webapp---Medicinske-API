@@ -1,0 +1,81 @@
+from io import BytesIO
+from pathlib import Path
+
+import pandas as pd
+import streamlit as st
+
+from logic import build_table_from_excel, clean_data, list_active_substances, load_data
+
+DEFAULT_DATA_FILE = "data.xlsx"
+
+st.set_page_config(page_title="Paknings-overblik", layout="wide")
+st.title("Paknings-overblik")
+st.caption("Søg på virksomt stof via ATC_txt og få tabellen vist direkte i browseren.")
+
+
+@st.cache_data
+def get_clean_data(path: str) -> pd.DataFrame:
+    df = load_data(path)
+    return clean_data(df)
+
+
+@st.cache_data
+def get_active_substances(path: str) -> list[str]:
+    return list_active_substances(path)
+
+
+
+def to_excel_bytes(df: pd.DataFrame) -> bytes:
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Overblik")
+    return output.getvalue()
+
+
+with st.sidebar:
+    st.header("Indstillinger")
+    data_path = st.text_input("Sti til Excel-fil", value=DEFAULT_DATA_FILE)
+    exact_match = st.checkbox("Præcist match på ATC_txt", value=True)
+    st.markdown(
+        "Læg din fil i samme mappe som appen og kald den `data.xlsx`, "
+        "eller skriv den fulde sti her."
+    )
+
+path_obj = Path(data_path)
+if not path_obj.exists():
+    st.warning(f"Filen blev ikke fundet: {path_obj}")
+    st.stop()
+
+try:
+    substances = get_active_substances(str(path_obj))
+except Exception as e:
+    st.error(f"Kunne ikke læse datafilen: {e}")
+    st.stop()
+
+if not substances:
+    st.warning("Der blev ikke fundet nogen værdier i ATC_txt.")
+    st.stop()
+
+selected = st.selectbox("Vælg virksomt stof", substances)
+
+if st.button("Generér tabel", type="primary"):
+    with st.spinner("Bygger tabel..."):
+        try:
+            result = build_table_from_excel(str(path_obj), selected, exact_match=exact_match)
+        except Exception as e:
+            st.error(f"Fejl under generering: {e}")
+        else:
+            if result.empty:
+                st.warning("Ingen data fundet for det valgte virksomt stof.")
+            else:
+                st.success(f"Fandt {len(result)} rækker.")
+                st.dataframe(result, use_container_width=True, hide_index=True)
+
+                excel_bytes = to_excel_bytes(result)
+                safe_name = selected.replace("/", "-").replace(" ", "_")
+                st.download_button(
+                    label="Download Excel",
+                    data=excel_bytes,
+                    file_name=f"overblik_{safe_name}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
