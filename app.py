@@ -68,7 +68,7 @@ if st.button("Generér tabel", type="primary"):
                 all_results = []
 
                 for substance in selected_substances:
-                    df = build_table_from_excel(path, substance)
+                    df = build_table_from_excel(str(path_obj), substance)
                     df["Virksomt stof"] = substance 
                     all_results.append(df)
                 result = pd.concat(all_results, ignore_index = True)
