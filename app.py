@@ -69,7 +69,22 @@ if st.button("Generér tabel", type="primary"):
                 st.warning("Ingen data fundet for det valgte virksomt stof.")
             else:
                 st.success(f"Fandt {len(result)} rækker.")
-                st.dataframe(result, use_container_width=True, hide_index=True)
+                def dk_format_1_decimal(x):
+                    if pd.isna(x):
+                        return ""
+                    return f"{x:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+                fmt = {}
+                for col in result.columns:
+                    if "Antal" in col or "Omsætning" in col:
+                        fmt[col] = dk_format_1_decimal
+
+                st.dataframe(
+                    result.style.format(fmt),
+                    use_container_width=True,
+                    hide_index=True
+                )
 
                 excel_bytes = to_excel_bytes(result)
                 safe_name = selected.replace("/", "-").replace(" ", "_")
