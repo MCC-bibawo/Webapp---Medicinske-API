@@ -74,11 +74,17 @@ if st.button("Generér tabel", type="primary"):
                         return ""
                     return f"{x:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+                def dk_format_2_decimal(x):
+                    if pd.isna(x):
+                        return ""
+                    return f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
                 fmt = {}
                 for col in result.columns:
                     if "Antal" in col or "Omsætning" in col:
                         fmt[col] = dk_format_1_decimal
+                    elif col == "AIP":
+                        fmt[col] = dk_format_2_decimal
 
                 st.dataframe(
                     result.style.format(fmt),
