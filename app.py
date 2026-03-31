@@ -56,12 +56,27 @@ if not substances:
     st.warning("Der blev ikke fundet nogen værdier i ATC_txt.")
     st.stop()
 
-selected = st.selectbox("Vælg virksomt stof", substances)
+selected_substances = st.multiselect(
+    "Vælg virksomt stof",
+    substances
+)
 
 if st.button("Generér tabel", type="primary"):
     with st.spinner("Bygger tabel..."):
         try:
-            result = build_table_from_excel(str(path_obj), selected, exact_match=exact_match)
+            if selected_substances:
+                all_results = []
+
+                for substance in selected_substances:
+                    df = build_table_from_excel(path, substance)
+                    df["Virksomt stof"] = substance 
+                    all_results.append(df)
+                result = pd.concat(all_results, ignore_index = True)
+
+                result = result.sort_values(
+                    ["Virksomt stof", "Antal pakninger 2025"],
+                    ascending=[True, False]
+                )
         except Exception as e:
             st.error(f"Fejl under generering: {e}")
         else:
