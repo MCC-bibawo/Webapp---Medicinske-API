@@ -108,7 +108,7 @@ if st.button("Generér tabel", type="primary"):
                 )
 
                 excel_bytes = to_excel_bytes(result)
-                safe_name = selected.replace("/", "-").replace(" ", "_")
+                safe_name = "_".join(selected_substances).replace("/", "-").replace(" ", "_")
                 st.download_button(
                     label="Download Excel",
                     data=excel_bytes,
