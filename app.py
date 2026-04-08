@@ -87,7 +87,7 @@ if st.button("Generér tabel", type="primary"):
                 def dk_format_1_decimal(x):
                     if pd.isna(x):
                         return ""
-                    return f"{x:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    return f"{x:.1f}".replace(".", ",")
 
                 def dk_format_2_decimal(x):
                     if pd.isna(x):
