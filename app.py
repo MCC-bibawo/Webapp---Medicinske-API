@@ -100,7 +100,7 @@ if st.button("Generér tabel", type="primary"):
                         fmt[col] = dk_format_1_decimal
                     elif col == "AIP":
                         fmt[col] = dk_format_2_decimal
-
+                st.info("Alle tal er angivet i 1.000 (antal pakninger og omsætning)")
                 st.dataframe(
                     result.style.format(fmt),
                     use_container_width=True,
