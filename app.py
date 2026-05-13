@@ -104,7 +104,7 @@ def make_format_dict(df: pd.DataFrame) -> dict:
     fmt = {}
 
     for col in df.columns:
-        if "Antal" in col or "Omsætning" in col:
+        if "Antal" in col or "Omsætning" in col or "Vækst" in col:
             fmt[col] = dk_format_1_decimal
         elif col == "AIP":
             fmt[col] = dk_format_2_decimal
@@ -123,6 +123,81 @@ def get_revenue_years(df: pd.DataFrame) -> list[str]:
 
     return sorted(years, key=int)
 
+def get_years_for_metric(df: pd.DataFrame, metric_prefix: str) -> list[str]:
+    """
+    Finder årskolonner for fx:
+    - 'Omsætning 2020', 'Omsætning 2021', ...
+    - 'Antal pakninger 2020', 'Antal pakninger 2021', ...
+    """
+    years = []
+
+    for col in df.columns:
+        if col.startswith(metric_prefix + " "):
+            year = col.replace(metric_prefix, "").strip()
+            if year.isdigit():
+                years.append(year)
+
+    return sorted(years, key=int)
+
+
+def add_yoy_growth_columns(
+    df: pd.DataFrame,
+    metric_prefix: str,
+    years: list[str]
+) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Tilføjer år-til-år vækstkolonner i procent.
+    Fx:
+    Vækst 2020-2021 (%)
+    Vækst 2021-2022 (%)
+    """
+    out = df.copy()
+    growth_cols = []
+
+    for prev_year, current_year in zip(years[:-1], years[1:]):
+        prev_col = f"{metric_prefix} {prev_year}"
+        current_col = f"{metric_prefix} {current_year}"
+        growth_col = f"Vækst {prev_year}-{current_year} (%)"
+
+        prev_values = pd.to_numeric(out[prev_col], errors="coerce")
+        current_values = pd.to_numeric(out[current_col], errors="coerce")
+
+        out[growth_col] = ((current_values / prev_values) - 1) * 100
+
+        # Hvis tidligere år er 0 eller mangler, kan væksten ikke beregnes meningsfuldt
+        out.loc[
+            (prev_values <= 0) | prev_values.isna() | current_values.isna(),
+            growth_col
+        ] = float("nan")
+
+        growth_cols.append(growth_col)
+
+    return out, growth_cols
+
+
+def filter_by_yoy_growth(
+    df: pd.DataFrame,
+    metric_prefix: str,
+    min_growth: float,
+    max_growth: float
+) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Beholder kun rækker hvor ALLE år-til-år vækstrater ligger mellem
+    min_growth og max_growth.
+    """
+    years = get_years_for_metric(df, metric_prefix)
+
+    if len(years) < 2:
+        return df.copy(), []
+
+    out, growth_cols = add_yoy_growth_columns(df, metric_prefix, years)
+
+    mask = out[growth_cols].notna().all(axis=1)
+
+    for col in growth_cols:
+        mask = mask & (out[col] >= min_growth) & (out[col] <= max_growth)
+
+    return out.loc[mask].copy(), growth_cols
 
 def get_current_result(current_key):
     if st.session_state.get("result_key") == current_key:
@@ -314,6 +389,38 @@ with tab_analyse:
                         value=True
                     )
 
+                    
+                    st.markdown("### Vækstfilter")
+
+                    use_growth_filter = st.checkbox(
+                        "Kun rækker med årlig vækst inden for et bestemt interval",
+                        value=False
+                    )
+
+                    growth_cols = []
+
+                    if use_growth_filter:
+                        col_growth_1, col_growth_2, col_growth_3 = st.columns(3)
+
+                        with col_growth_1:
+                            growth_metric_label = st.selectbox(
+                                "Vækst måles på",
+                                 ["Omsætning", "Antal pakninger"]
+                        )
+
+                        with col_growth_2:
+                            min_growth = st.number_input(
+                              "Minimum årlig vækst (%)",
+                            value=5.0,
+                            step=0.5
+                        )
+
+                        with col_growth_3:
+                            max_growth = st.number_input(
+                                "Maksimum årlig vækst (%)",
+                                value=10.0,
+                                step=0.5
+                        )
                     analysis_df = result.copy()
 
                     numeric_candidates = [
@@ -348,6 +455,16 @@ with tab_analyse:
                         )
 
                     opportunities = analysis_df.loc[mask].copy()
+
+                    if use_growth_filter and not opportunities.empty:
+                        metric_prefix = growth_metric_label
+
+                        opportunities, growth_cols = filter_by_yoy_growth(
+                            opportunities,
+                            metric_prefix=metric_prefix,
+                            min_growth=min_growth,
+                            max_growth=max_growth
+                    )
 
                     st.markdown("### Resultat af analyse")
 
@@ -414,6 +531,9 @@ with tab_analyse:
                             "konkurrenter",
                             revenue_col,
                         ]
+
+                        if use_growth_filter:
+                            display_cols = display_cols + growth_cols
 
                         display_cols = [
                             col for col in display_cols
