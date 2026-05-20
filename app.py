@@ -422,9 +422,16 @@ with tab_analyse:
                                 step=0.5
                         )
                     analysis_df = result.copy()
-
+                    if "Konkurrenter" in analysis_df.columns:
+                        competitor_col = "Konkurrenter"
+                    elif "konkurrenter" in analysis_df.columns:
+                        competitor_col = "konkurrenter"
+                    else:
+                        st.error("Kunne ikke finde kolonnen 'Konkurrenter' i tabellen.")
+                        st.stop()
+                    
                     numeric_candidates = [
-                        "konkurrenter",
+                        competitor_col,
                         "AIP",
                         revenue_col,
                         quantity_col
@@ -437,8 +444,8 @@ with tab_analyse:
                                 errors="coerce"
                             )
 
-                    mask = analysis_df["konkurrenter"].fillna(0) <= max_competitors
-
+                    mask = analysis_df[competitor_col].fillna(0) <= max_competitors
+                    
                     if revenue_col in analysis_df.columns:
                         mask = mask & (
                             analysis_df[revenue_col].fillna(0) >= min_revenue
@@ -503,8 +510,8 @@ with tab_analyse:
                         if "AIP" in opportunities.columns:
                             sort_options.append("AIP")
 
-                        if "konkurrenter" in opportunities.columns:
-                            sort_options.append("konkurrenter")
+                        if competitor_col in opportunities.columns and not opportunities.empty:
+                            avg_comp = opportunities[competitor_col].mean()
 
                         if sort_options:
                             sort_by = st.selectbox(
@@ -513,7 +520,7 @@ with tab_analyse:
                                 index=0
                             )
 
-                            ascending = sort_by == "konkurrenter"
+                            ascending = sort_by == competitor_col
 
                             opportunities = opportunities.sort_values(
                                 sort_by,
@@ -528,7 +535,7 @@ with tab_analyse:
                             "Pakningstørrelse",
                             quantity_col,
                             "AIP",
-                            "konkurrenter",
+                            competitor_col,
                             revenue_col,
                         ]
 
