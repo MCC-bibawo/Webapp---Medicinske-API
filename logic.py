@@ -224,7 +224,7 @@ def enrich_with_api(table_df: pd.DataFrame, active_name: str) -> pd.DataFrame:
     return result.reset_index(drop=True)
 
 
- def build_table_from_clean_data(
+def build_table_from_clean_data(
     df_clean: pd.DataFrame,
     active_name: str,
     exact_match: bool = True
@@ -246,16 +246,18 @@ def enrich_with_api(table_df: pd.DataFrame, active_name: str) -> pd.DataFrame:
 
 
 def build_table_from_excel(
-        path: str,
-        active_name: str,
-        exact_match: bool = True
-    ) -> pd.DataFrame:
-        
-        df = load_data(path)
-        df = clean_data(df)
+    path: str,
+    active_name: str,
+    exact_match: bool = True
+) -> pd.DataFrame:
+    """
+    Wrapper-funktion der stadig kan bygge tabellen direkte fra Excel-filen.
+    """
+    df = load_data(path)
+    df = clean_data(df)
 
-        return build_table_from_clean_data(
-            df,
-            active_name,
-            exact_match=exact_match
-        )
+    return build_table_from_clean_data(
+        df,
+        active_name,
+        exact_match=exact_match
+    )
