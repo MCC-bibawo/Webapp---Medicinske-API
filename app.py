@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from logic import build_table_from_clean_data, build_table_from_excel, clean_data, load_data
+from logic import build_table_from_clean_data, build_table_from_excel, clean_data, list_active_substances, load_data
 
 DEFAULT_DATA_FILE = "data.xlsx"
 
