@@ -1,3 +1,4 @@
+from functools import lru_cache
 import math
 import re
 import time
@@ -126,7 +127,7 @@ def get_field(d: dict, *candidates):
     return None
 
 
-
+@lru_cache(maxsize=512)
 def search_packages(active_name: str):
     results = []
     for name in expand_name_aliases(active_name):
@@ -143,7 +144,7 @@ def search_packages(active_name: str):
     return results
 
 
-
+@lru_cache(maxsize=10000)
 def get_details(vnr: str):
     url = f"{BASE}/produkter/detaljer/{vnr}"
     data = _get_json(url, params={"format": "json"})
@@ -292,7 +293,7 @@ def find_offers_fuzzy(active_name: str, dosageform: str, strength: str, pack: st
     }
 
 
-
+@lru_cache(maxsize=20000)
 def get_aip_and_competitors(active_name: str, dosageform: str, strength: str, pack: str):
     result = find_offers_fuzzy(active_name, dosageform, strength, pack)
 
