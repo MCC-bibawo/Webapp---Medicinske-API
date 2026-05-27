@@ -223,11 +223,33 @@ def enrich_with_api(table_df: pd.DataFrame, active_name: str) -> pd.DataFrame:
 
     return result.reset_index(drop=True)
 
+    def build_table_from_clean_data(
+        df_clean: pd.DataFrame,
+        active_name: str,
+        exact_match: bool = True
+    ) -> pd.DataFrame:
+        df = filter_by_active_substance(
+            df_clean,
+            active_name,
+            exact_match=exact_match
+        )
 
-def build_table_from_excel(path: str, active_name: str, exact_match: bool = True) -> pd.DataFrame:
-    df = load_data(path)
-    df = clean_data(df)
-    df = filter_by_active_substance(df, active_name, exact_match=exact_match)
-    table_df = build_base_table(df)
-    table_df = enrich_with_api(table_df, active_name)
-    return table_df
+        table_df = build_base_table(df)
+        table_df = enrich_with_api(table_df, active_name)
+
+        return table_df
+
+
+    def build_table_from_excel(
+        path: str,
+        active_name: str,
+        exact_match: bool = True
+    ) -> pd.DataFrame:
+        df = load_data(path)
+        df = clean_data(df)
+
+        return build_table_from_clean_data(
+            df,
+            active_name,
+            exact_match=exact_match
+        )
