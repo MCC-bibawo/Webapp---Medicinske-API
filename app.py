@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from logic import build_table_from_excel, clean_data, list_active_substances, load_data
+from logic import build_table_from_clean_data, build_table_from_excel, clean_data, load_data
 
 DEFAULT_DATA_FILE = "data.xlsx"
 
@@ -22,7 +22,16 @@ def get_clean_data(path: str) -> pd.DataFrame:
 
 @st.cache_data
 def get_active_substances(path: str) -> list[str]:
-    return list_active_substances(path)
+    df = get_clean_data(path)
+
+    values = (
+        df["ATC_txt"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+    )
+
+    return sorted([v for v in values.unique() if v])
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -33,16 +42,19 @@ def build_result_for_substances(
 ) -> pd.DataFrame:
     """
     Bygger én samlet tabel for ét eller flere virksomme stoffer.
-    Caches i 1 time, så appen ikke henter API-data unødigt ofte.
+    Excel-filen læses kun én gang.
     """
+    df_clean = get_clean_data(path)
+
     all_results = []
 
     for substance in selected_substances_tuple:
-        df = build_table_from_excel(
-            path,
+        df = build_table_from_clean_data(
+            df_clean,
             substance,
             exact_match=exact_match
         )
+
         df["Virksomt stof"] = substance
         all_results.append(df)
 
@@ -241,10 +253,11 @@ selected_substances = st.multiselect(
     "Vælg virksomt stof",
     substances
 )
+selected_substances_key = tuple(sorted(selected_substances))
 
 current_key = (
     str(path_obj),
-    tuple(selected_substances),
+    selected_substances_key,
     exact_match
 )
 
@@ -325,7 +338,7 @@ with tab_analyse:
                     try:
                         result = build_result_for_substances(
                             str(path_obj),
-                            tuple(selected_substances),
+                            selected_substances_key,
                             exact_match
                         )
 
