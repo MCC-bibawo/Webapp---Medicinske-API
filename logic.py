@@ -224,7 +224,7 @@ def enrich_with_api(table_df: pd.DataFrame, active_name: str) -> pd.DataFrame:
     return result.reset_index(drop=True)
 
 
-    def build_table_from_clean_data(
+ def build_table_from_clean_data(
     df_clean: pd.DataFrame,
     active_name: str,
     exact_match: bool = True
@@ -245,7 +245,7 @@ def enrich_with_api(table_df: pd.DataFrame, active_name: str) -> pd.DataFrame:
     return table_df
 
 
-    def build_table_from_excel(
+def build_table_from_excel(
         path: str,
         active_name: str,
         exact_match: bool = True
