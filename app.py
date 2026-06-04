@@ -136,13 +136,31 @@ def build_market_base_result(path: str) -> pd.DataFrame:
     return build_market_base_table_from_clean_data(df_clean)
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
 def enrich_shortlist_with_api(shortlist_df: pd.DataFrame) -> pd.DataFrame:
     """
     Beriger shortlisten med AIP og Konkurrenter via samme API-logik
-    som den oprindelige Overblik-tabel.
+    som den oprindelige Overblik-tabel, men viser progress i appen.
     """
-    return enrich_shortlist_using_overview_api(shortlist_df)
+
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
+
+    def update_progress(i, total, active_name):
+        progress = i / total if total else 0
+        progress_bar.progress(progress)
+        progress_text.write(
+            f"Henter AIP og konkurrenter: {i}/{total} virksomme stoffer — {active_name}"
+        )
+
+    result = enrich_shortlist_using_overview_api(
+        shortlist_df,
+        progress_callback=update_progress
+    )
+
+    progress_bar.empty()
+    progress_text.empty()
+
+    return result
 
 def to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Overblik") -> bytes:
     output = BytesIO()
