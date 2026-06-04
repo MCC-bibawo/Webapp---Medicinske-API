@@ -261,3 +261,68 @@ def build_table_from_excel(
         active_name,
         exact_match=exact_match
     )
+
+
+def build_market_base_table_from_clean_data(df_clean: pd.DataFrame) -> pd.DataFrame:
+    """
+    Bygger samlet markedstabel for alle ATC_txt uden API-opslag.
+    Bruges til hurtig shortlist i Topliste-fanen.
+    """
+
+    grouped = (
+        df_clean
+        .groupby(["ATC_txt", "Dosf_LT", "streng", "packtext", "aar"], dropna=False, as_index=False)
+        .agg({
+            "ApkSum": "sum",
+            "EkspSum": "sum"
+        })
+    )
+
+    qty_pivot = (
+        grouped.pivot_table(
+            index=["ATC_txt", "Dosf_LT", "streng", "packtext"],
+            columns="aar",
+            values="ApkSum",
+            aggfunc="sum",
+            fill_value=0
+        )
+        .reindex(columns=YEARS, fill_value=0)
+        .reset_index()
+    )
+
+    rev_pivot = (
+        grouped.pivot_table(
+            index=["ATC_txt", "Dosf_LT", "streng", "packtext"],
+            columns="aar",
+            values="EkspSum",
+            aggfunc="sum",
+            fill_value=0
+        )
+        .reindex(columns=YEARS, fill_value=0)
+        .reset_index()
+    )
+
+    qty_pivot.columns = (
+        ["Virksomt stof", "Dosageform", "Styrke", "Pakningstørrelse"]
+        + [f"Antal pakninger {year}" for year in YEARS]
+    )
+
+    rev_pivot.columns = (
+        ["Virksomt stof", "Dosageform", "Styrke", "Pakningstørrelse"]
+        + [f"Omsætning {year}" for year in YEARS]
+    )
+
+    result = qty_pivot.merge(
+        rev_pivot,
+        on=["Virksomt stof", "Dosageform", "Styrke", "Pakningstørrelse"],
+        how="outer"
+    )
+
+    # Omregn til 1.000 ligesom i resten af appen
+    qty_cols = [c for c in result.columns if c.startswith("Antal pakninger ")]
+    rev_cols = [c for c in result.columns if c.startswith("Omsætning ")]
+
+    result[qty_cols] = result[qty_cols].apply(pd.to_numeric, errors="coerce").fillna(0) / 1000
+    result[rev_cols] = result[rev_cols].apply(pd.to_numeric, errors="coerce").fillna(0) / 1000
+
+    return result.reset_index(drop=True)
