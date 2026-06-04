@@ -157,20 +157,15 @@ def minmax_score(series: pd.Series) -> pd.Series:
 def competitor_score(series: pd.Series) -> pd.Series:
     """
     Lavt antal konkurrenter giver høj score.
-
-    Simpel model:
-    0 konkurrenter = 100
-    1 konkurrent  = 80
-    2 konkurrenter = 60
-    3 konkurrenter = 40
-    4 konkurrenter = 20
-    5+ konkurrenter = 0
+    Manglende konkurrentdata får 0 score.
     """
+    s = pd.to_numeric(series, errors="coerce")
 
-    s = pd.to_numeric(series, errors="coerce").fillna(0)
+    score = (100 - s * 20).clip(lower=0, upper=100)
 
-    return (100 - s * 20).clip(lower=0, upper=100)
+    score[s.isna()] = 0
 
+    return score
 
 def find_competitor_column(df: pd.DataFrame) -> str | None:
     """
@@ -389,7 +384,7 @@ def build_final_opportunity_score(
         out[competitor_col] = pd.to_numeric(
             out[competitor_col],
             errors="coerce"
-        ).fillna(0)
+        )
 
         if min_competitors is not None:
             out = out[out[competitor_col] >= min_competitors]
