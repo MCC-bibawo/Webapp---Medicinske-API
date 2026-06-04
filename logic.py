@@ -363,21 +363,22 @@ def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame, progress_cal
 
     all_parts = []
 
-    for active_name, part in shortlist_df.groupby("Virksomt stof", dropna=False):
+    groups = list(shortlist_df.groupby("Virksomt stof", dropna=False))
+    total_groups = len(groups)
+
+    for i, (active_name, part) in enumerate(groups, start=1):
         active_name = str(active_name).strip()
+
+        if progress_callback is not None:
+            progress_callback(i, total_groups, active_name)
 
         tmp = part.copy()
 
-        # Gem original kolonneorden/navne til sidst
-        original_cols = list(tmp.columns)
-
-        # Lav de interne kolonnenavne, som enrich_with_api bruger
         tmp["Doseringsform"] = tmp["Dosageform"]
         tmp["Pakningsstørrelse_norm"] = tmp["Pakningstørrelse"]
 
         enriched = enrich_with_api(tmp, active_name)
 
-        # Sørg for at visningskolonnerne stadig findes bagefter
         if "Dosageform" not in enriched.columns and "Doseringsform" in enriched.columns:
             enriched["Dosageform"] = enriched["Doseringsform"]
 
@@ -386,8 +387,8 @@ def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame, progress_cal
 
         all_parts.append(enriched)
 
-    if not all_parts:
-        return pd.DataFrame()
+        if not all_parts:
+            return pd.DataFrame()
 
     out = pd.concat(all_parts, ignore_index=True)
 
