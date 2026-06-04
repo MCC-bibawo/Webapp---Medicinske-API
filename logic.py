@@ -326,3 +326,57 @@ def build_market_base_table_from_clean_data(df_clean: pd.DataFrame) -> pd.DataFr
     result[rev_cols] = result[rev_cols].apply(pd.to_numeric, errors="coerce").fillna(0) / 1000
 
     return result.reset_index(drop=True)
+
+def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Beriger en shortlist med AIP og Konkurrenter ved at bruge præcis samme
+    API-logik som den oprindelige Overblik-tabel.
+
+    Forventede kolonner i shortlist_df:
+    - Virksomt stof
+    - Dosageform
+    - Styrke
+    - Pakningstørrelse
+    """
+
+    if shortlist_df is None or shortlist_df.empty:
+        return shortlist_df.copy()
+
+    required_cols = [
+        "Virksomt stof",
+        "Dosageform",
+        "Styrke",
+        "Pakningstørrelse",
+    ]
+
+    missing = [c for c in required_cols if c not in shortlist_df.columns]
+    if missing:
+        raise ValueError(f"Shortlist mangler kolonner: {missing}")
+
+    all_parts = []
+
+    for active_name, part in shortlist_df.groupby("Virksomt stof", dropna=False):
+        active_name = str(active_name).strip()
+
+        tmp = part.copy()
+
+        # Omdøb til de kolonnenavne som den oprindelige enrich_with_api forventer
+        tmp = tmp.rename(columns={
+            "Dosageform": "Doseringsform",
+            "Pakningstørrelse": "Pakningsstørrelse_norm",
+        })
+
+        enriched = enrich_with_api(tmp, active_name)
+
+        # Omdøb tilbage til appens visningsnavne
+        enriched = enriched.rename(columns={
+            "Doseringsform": "Dosageform",
+            "Pakningsstørrelse_norm": "Pakningstørrelse",
+        })
+
+        all_parts.append(enriched)
+
+    if not all_parts:
+        return pd.DataFrame()
+
+    return pd.concat(all_parts, ignore_index=True)
