@@ -126,6 +126,7 @@ def build_final_opportunity_score(
     revenue_weight: float = 30,
     growth_weight: float = 20,
     aip_weight: float = 15,
+    min_competitors: int | None = None,
     max_competitors: int | None = None,
 ) -> pd.DataFrame:
     """
@@ -136,8 +137,13 @@ def build_final_opportunity_score(
 
     revenue_col = f"Omsætning {revenue_year}"
 
-    if max_competitors is not None and "Konkurrenter" in out.columns:
-        out["Konkurrenter"] = pd.to_numeric(out["Konkurrenter"], errors="coerce").fillna(0)
+    if "Konkurrenter" in out.columns:
+    out["Konkurrenter"] = pd.to_numeric(out["Konkurrenter"], errors="coerce").fillna(0)
+
+    if min_competitors is not None:
+        out = out[out["Konkurrenter"] >= min_competitors]
+
+    if max_competitors is not None:
         out = out[out["Konkurrenter"] <= max_competitors]
 
     for col in ["Konkurrenter", "AIP", revenue_col, growth_col]:
