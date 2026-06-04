@@ -327,7 +327,7 @@ def build_market_base_table_from_clean_data(df_clean: pd.DataFrame) -> pd.DataFr
 
     return result.reset_index(drop=True)
 
-def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame) -> pd.DataFrame:
+def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame, progress_callback=None) -> pd.DataFrame:
     """
     Beriger en shortlist med AIP og Konkurrenter ved at bruge samme API-logik
     som den oprindelige overblikstabel.
