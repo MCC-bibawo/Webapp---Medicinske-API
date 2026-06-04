@@ -5,8 +5,9 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from logic import build_table_from_clean_data, build_table_from_excel, clean_data, list_active_substances, load_data
+from logic import (build_market_base_table_from_clean_data, build_table_from_clean_data, build_table_from_excel, clean_data, load_data,) 
 from analysis import build_top_opportunities
+from medicin_api import get_aip_and_competitors
 
 DEFAULT_DATA_FILE = "data.xlsx"
 
@@ -124,6 +125,77 @@ def build_market_result(path: str, exact_match: bool) -> pd.DataFrame:
         )
 
     return result.reset_index(drop=True)
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def build_market_base_result(path: str) -> pd.DataFrame:
+    """
+    Bygger hele markedstabellen uden API.
+    Caches i 24 timer.
+    """
+    df_clean = get_clean_data(path)
+    return build_market_base_table_from_clean_data(df_clean)
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_api_cached(
+    active_name: str,
+    dosageform: str,
+    strength: str,
+    pack: str
+) -> dict:
+    """
+    Henter AIP og konkurrenter fra Medicinpriser.
+    Caches i 24 timer pr. unik kombination.
+    """
+    return get_aip_and_competitors(
+        active_name=active_name,
+        dosageform=dosageform,
+        strength=strength,
+        pack=pack
+    )
+
+
+def enrich_shortlist_with_api(shortlist_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Beriger kun shortlisten med AIP og Konkurrenter.
+    Ikke hele markedet.
+    """
+    out = shortlist_df.copy()
+
+    aip_values = []
+    competitor_values = []
+
+    progress = st.progress(0)
+    total = len(out)
+
+    for i, (_, row) in enumerate(out.iterrows(), start=1):
+        try:
+            api_result = get_api_cached(
+                active_name=str(row["Virksomt stof"]),
+                dosageform=str(row["Dosageform"]),
+                strength=str(row["Styrke"]),
+                pack=str(row["Pakningstørrelse"])
+            )
+
+            aip_values.append(api_result.get("AIP"))
+            competitor_values.append(api_result.get("konkurrenter"))
+
+        except Exception:
+            aip_values.append(float("nan"))
+            competitor_values.append(0)
+
+        if total > 0:
+            progress.progress(i / total)
+
+    progress.empty()
+
+    out["AIP"] = aip_values
+    out["Konkurrenter"] = competitor_values
+
+    out["AIP"] = pd.to_numeric(out["AIP"], errors="coerce")
+    out["Konkurrenter"] = pd.to_numeric(out["Konkurrenter"], errors="coerce").fillna(0).astype("Int64")
+
+    return out
 
 def to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Overblik") -> bytes:
     output = BytesIO()
