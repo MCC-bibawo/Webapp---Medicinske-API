@@ -1,23 +1,8 @@
-import pandas as pd
 import numpy as np
-
-
-def find_competitor_column(df: pd.DataFrame) -> str:
-    """
-    Finder konkurrent-kolonnen uanset om den hedder 'Konkurrenter' eller 'konkurrenter'.
-    """
-    if "Konkurrenter" in df.columns:
-        return "Konkurrenter"
-    if "konkurrenter" in df.columns:
-        return "konkurrenter"
-    raise ValueError("Kunne ikke finde kolonnen 'Konkurrenter'.")
+import pandas as pd
 
 
 def minmax_score(series: pd.Series) -> pd.Series:
-    """
-    Omdanner en numerisk kolonne til score fra 0-100.
-    Højere værdi = højere score.
-    """
     s = pd.to_numeric(series, errors="coerce")
 
     min_val = s.min()
@@ -30,14 +15,10 @@ def minmax_score(series: pd.Series) -> pd.Series:
 
 
 def competitor_score(series: pd.Series) -> pd.Series:
-    """
-    Lavt antal konkurrenter giver høj score.
-    """
     s = pd.to_numeric(series, errors="coerce").fillna(0)
 
-    score = 100 - (s * 20)
-
-    return score.clip(lower=0, upper=100)
+    # 0 konkurrenter = 100, 1 = 80, 2 = 60, 3 = 40, 4 = 20, 5+ = 0
+    return (100 - s * 20).clip(lower=0, upper=100)
 
 
 def add_period_growth(
@@ -47,15 +28,6 @@ def add_period_growth(
     end_year: str,
     annualized: bool = True
 ) -> tuple[pd.DataFrame, str]:
-    """
-    Tilføjer en vækstkolonne fra start_year til end_year.
-
-    metric_prefix kan fx være:
-    - 'Omsætning'
-    - 'Antal pakninger'
-
-    annualized=True betyder årlig gennemsnitlig vækst.
-    """
     out = df.copy()
 
     start_col = f"{metric_prefix} {start_year}"
@@ -92,57 +64,91 @@ def add_period_growth(
     return out, growth_col
 
 
-def calculate_opportunity_score(
-    df: pd.DataFrame,
-    revenue_col: str,
-    growth_col: str | None = None,
-    aip_col: str = "AIP",
+def build_shortlist_without_api(
+    market_df: pd.DataFrame,
+    shortlist_n: int,
+    revenue_year: str,
+    growth_start_year: str,
+    growth_end_year: str,
+    growth_metric: str = "Omsætning",
+    min_revenue: float = 0,
+) -> tuple[pd.DataFrame, str]:
+    """
+    Finder en shortlist uden API baseret på:
+    - omsætning
+    - vækst
+    - antal pakninger
+
+    Returnerer shortlist + navnet på vækstkolonnen.
+    """
+
+    out = market_df.copy()
+
+    revenue_col = f"Omsætning {revenue_year}"
+    quantity_col = f"Antal pakninger {revenue_year}"
+
+    out, growth_col = add_period_growth(
+        out,
+        metric_prefix=growth_metric,
+        start_year=growth_start_year,
+        end_year=growth_end_year,
+        annualized=True
+    )
+
+    for col in [revenue_col, quantity_col, growth_col]:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    if revenue_col in out.columns:
+        out = out[out[revenue_col].fillna(0) >= min_revenue]
+
+    # Grov score uden API
+    out["Shortlist score omsætning"] = minmax_score(out[revenue_col]) if revenue_col in out.columns else 50
+    out["Shortlist score vækst"] = minmax_score(out[growth_col].fillna(0)) if growth_col in out.columns else 50
+    out["Shortlist score antal"] = minmax_score(out[quantity_col]) if quantity_col in out.columns else 50
+
+    out["Shortlist Score"] = (
+        out["Shortlist score omsætning"] * 0.55
+        + out["Shortlist score vækst"] * 0.30
+        + out["Shortlist score antal"] * 0.15
+    )
+
+    out = out.sort_values("Shortlist Score", ascending=False, na_position="last")
+
+    return out.head(shortlist_n).copy(), growth_col
+
+
+def build_final_opportunity_score(
+    enriched_df: pd.DataFrame,
+    revenue_year: str,
+    growth_col: str,
     competitor_weight: float = 35,
     revenue_weight: float = 30,
     growth_weight: float = 20,
     aip_weight: float = 15,
+    max_competitors: int | None = None,
 ) -> pd.DataFrame:
     """
-    Beregner en Opportunity Score fra 0-100 baseret på:
-    - få konkurrenter
-    - høj omsætning
-    - høj vækst
-    - høj AIP
+    Beregner endelig Opportunity Score efter AIP/Konkurrenter er hentet.
     """
 
-    out = df.copy()
+    out = enriched_df.copy()
 
-    competitor_col = find_competitor_column(out)
+    revenue_col = f"Omsætning {revenue_year}"
 
-    # Sikr numeriske kolonner
-    out[competitor_col] = pd.to_numeric(out[competitor_col], errors="coerce").fillna(0)
+    if max_competitors is not None and "Konkurrenter" in out.columns:
+        out["Konkurrenter"] = pd.to_numeric(out["Konkurrenter"], errors="coerce").fillna(0)
+        out = out[out["Konkurrenter"] <= max_competitors]
 
-    if revenue_col in out.columns:
-        out[revenue_col] = pd.to_numeric(out[revenue_col], errors="coerce").fillna(0)
-    else:
-        out[revenue_col] = 0
+    for col in ["Konkurrenter", "AIP", revenue_col, growth_col]:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
 
-    if aip_col in out.columns:
-        out[aip_col] = pd.to_numeric(out[aip_col], errors="coerce")
-    else:
-        out[aip_col] = np.nan
+    out["Score konkurrence"] = competitor_score(out["Konkurrenter"]) if "Konkurrenter" in out.columns else 50
+    out["Score omsætning"] = minmax_score(out[revenue_col]) if revenue_col in out.columns else 50
+    out["Score vækst"] = minmax_score(out[growth_col].fillna(0)) if growth_col in out.columns else 50
+    out["Score AIP"] = minmax_score(out["AIP"].fillna(0)) if "AIP" in out.columns else 50
 
-    if growth_col and growth_col in out.columns:
-        out[growth_col] = pd.to_numeric(out[growth_col], errors="coerce")
-    else:
-        growth_col = None
-
-    # Del-scores
-    out["Score konkurrence"] = competitor_score(out[competitor_col])
-    out["Score omsætning"] = minmax_score(out[revenue_col])
-    out["Score AIP"] = minmax_score(out[aip_col].fillna(0))
-
-    if growth_col:
-        out["Score vækst"] = minmax_score(out[growth_col].fillna(0))
-    else:
-        out["Score vækst"] = 50
-
-    # Normalisér vægte, så de ikke behøver summere til 100
     total_weight = competitor_weight + revenue_weight + growth_weight + aip_weight
 
     if total_weight == 0:
@@ -157,61 +163,7 @@ def calculate_opportunity_score(
 
     out["Opportunity Score"] = out["Opportunity Score"].round(1)
 
-    return out.sort_values("Opportunity Score", ascending=False, na_position="last")
+    out = out.sort_values("Opportunity Score", ascending=False, na_position="last")
+    out.insert(0, "Rank", range(1, len(out) + 1))
 
-
-def build_top_opportunities(
-    df: pd.DataFrame,
-    top_n: int,
-    revenue_year: str,
-    growth_start_year: str,
-    growth_end_year: str,
-    growth_metric: str = "Omsætning",
-    annualized_growth: bool = True,
-    competitor_weight: float = 35,
-    revenue_weight: float = 30,
-    growth_weight: float = 20,
-    aip_weight: float = 15,
-    min_revenue: float = 0,
-    max_competitors: int | None = None,
-) -> pd.DataFrame:
-    """
-    Bygger en top-liste over de mest interessante muligheder.
-    """
-
-    out = df.copy()
-
-    competitor_col = find_competitor_column(out)
-
-    revenue_col = f"Omsætning {revenue_year}"
-
-    out, growth_col = add_period_growth(
-        out,
-        metric_prefix=growth_metric,
-        start_year=growth_start_year,
-        end_year=growth_end_year,
-        annualized=annualized_growth
-    )
-
-    # Basisfiltre
-    if revenue_col in out.columns:
-        out[revenue_col] = pd.to_numeric(out[revenue_col], errors="coerce").fillna(0)
-        out = out[out[revenue_col] >= min_revenue]
-
-    if max_competitors is not None:
-        out[competitor_col] = pd.to_numeric(out[competitor_col], errors="coerce").fillna(0)
-        out = out[out[competitor_col] <= max_competitors]
-
-    scored = calculate_opportunity_score(
-        out,
-        revenue_col=revenue_col,
-        growth_col=growth_col,
-        competitor_weight=competitor_weight,
-        revenue_weight=revenue_weight,
-        growth_weight=growth_weight,
-        aip_weight=aip_weight,
-    )
-
-    scored.insert(0, "Rank", range(1, len(scored) + 1))
-
-    return scored.head(top_n).copy()
+    return out
