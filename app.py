@@ -780,13 +780,29 @@ with tab_topliste:
             index=0
         )
 
-    max_competitors_top = st.number_input(
-        "Maks konkurrenter efter API-opslag",
-        min_value=0,
-        max_value=50,
-        value=5,
-        step=1
-    )
+    comp_col1, comp_col2 = st.columns(2)
+
+    with comp_col1:
+        min_competitors_top = st.number_input(
+            "Minimum konkurrenter efter API-opslag",
+            min_value=0,
+            max_value=50,
+            value=1,
+            step=1
+        )
+
+    with comp_col2:
+        max_competitors_top = st.number_input(
+            "Maksimum konkurrenter efter API-opslag",
+            min_value=0,
+            max_value=50,
+            value=5,
+            step=1
+        )
+
+    if min_competitors_top > max_competitors_top:
+        st.error("Minimum konkurrenter må ikke være større end maksimum konkurrenter.")
+        st.stop()
 
     st.markdown("### Vægte i endelig score")
 
@@ -840,8 +856,9 @@ with tab_topliste:
                     revenue_weight=revenue_weight,
                     growth_weight=growth_weight,
                     aip_weight=aip_weight,
+                    min_competitors=min_competitors_top,
                     max_competitors=max_competitors_top,
-                )
+                    )
 
                 top_df = top_df.head(top_n).copy()
 
