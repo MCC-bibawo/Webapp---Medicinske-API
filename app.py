@@ -1,10 +1,12 @@
 from io import BytesIO
 from pathlib import Path
 
+
 import pandas as pd
 import streamlit as st
 
 from logic import build_table_from_clean_data, build_table_from_excel, clean_data, list_active_substances, load_data
+from analysis import build_top_opportunities
 
 DEFAULT_DATA_FILE = "data.xlsx"
 
@@ -586,3 +588,177 @@ with tab_analyse:
                             file_name=f"analyse_{safe_name}_{analysis_year}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
+                st.markdown("## Top opportunities")
+
+st.markdown(
+    "Denne analyse rangerer pakninger ud fra lav konkurrence, høj omsætning, vækst og AIP."
+)
+
+top_col1, top_col2, top_col3, top_col4 = st.columns(4)
+
+with top_col1:
+    top_n = st.selectbox(
+        "Antal på toplisten",
+        [10, 20, 50, 100],
+        index=0
+    )
+
+with top_col2:
+    revenue_year = st.selectbox(
+        "Omsætningsår",
+        ["2020", "2021", "2022", "2023", "2024", "2025"],
+        index=5
+    )
+
+with top_col3:
+    growth_start_year = st.selectbox(
+        "Vækst startår",
+        ["2020", "2021", "2022", "2023", "2024"],
+        index=0
+    )
+
+with top_col4:
+    possible_end_years = [
+        year for year in ["2021", "2022", "2023", "2024", "2025"]
+        if int(year) > int(growth_start_year)
+    ]
+
+    growth_end_year = st.selectbox(
+        "Vækst slutår",
+        possible_end_years,
+        index=len(possible_end_years) - 1
+    )
+
+top_col5, top_col6, top_col7 = st.columns(3)
+
+with top_col5:
+    growth_metric = st.selectbox(
+        "Vækst måles på",
+        ["Omsætning", "Antal pakninger"],
+        index=0
+    )
+
+with top_col6:
+    min_revenue_top = st.number_input(
+        "Minimum omsætning i valgt år (1.000)",
+        min_value=0.0,
+        value=0.0,
+        step=100.0
+    )
+
+with top_col7:
+    max_competitors_top = st.number_input(
+        "Maks konkurrenter",
+        min_value=0,
+        max_value=50,
+        value=5,
+        step=1
+    )
+
+st.markdown("### Vægte i scoremodellen")
+
+w1, w2, w3, w4 = st.columns(4)
+
+with w1:
+    competitor_weight = st.slider(
+        "Vægt: lav konkurrence",
+        min_value=0,
+        max_value=100,
+        value=35
+    )
+
+with w2:
+    revenue_weight = st.slider(
+        "Vægt: omsætning",
+        min_value=0,
+        max_value=100,
+        value=30
+    )
+
+with w3:
+    growth_weight = st.slider(
+        "Vægt: vækst",
+        min_value=0,
+        max_value=100,
+        value=20
+    )
+
+with w4:
+    aip_weight = st.slider(
+        "Vægt: AIP",
+        min_value=0,
+        max_value=100,
+        value=15
+    )
+
+if st.button("Lav top-liste", key="build_top_opportunities"):
+    try:
+        top_df = build_top_opportunities(
+            result,
+            top_n=top_n,
+            revenue_year=revenue_year,
+            growth_start_year=growth_start_year,
+            growth_end_year=growth_end_year,
+            growth_metric=growth_metric,
+            annualized_growth=True,
+            competitor_weight=competitor_weight,
+            revenue_weight=revenue_weight,
+            growth_weight=growth_weight,
+            aip_weight=aip_weight,
+            min_revenue=min_revenue_top,
+            max_competitors=max_competitors_top,
+        )
+
+        if top_df.empty:
+            st.warning("Ingen rækker matcher kriterierne.")
+        else:
+            display_cols = [
+                "Rank",
+                "Opportunity Score",
+                "Virksomt stof",
+                "Dosageform",
+                "Styrke",
+                "Pakningstørrelse",
+                f"Antal pakninger {revenue_year}",
+                "AIP",
+                "Konkurrenter" if "Konkurrenter" in top_df.columns else "konkurrenter",
+                f"Omsætning {revenue_year}",
+                f"Årlig vækst {growth_start_year}-{growth_end_year} (%)",
+                "Score konkurrence",
+                "Score omsætning",
+                "Score vækst",
+                "Score AIP",
+            ]
+
+            display_cols = [
+                col for col in display_cols
+                if col in top_df.columns
+            ]
+
+            fmt = make_format_dict(top_df)
+            fmt["Opportunity Score"] = dk_format_1_decimal
+            fmt["Score konkurrence"] = dk_format_1_decimal
+            fmt["Score omsætning"] = dk_format_1_decimal
+            fmt["Score vækst"] = dk_format_1_decimal
+            fmt["Score AIP"] = dk_format_1_decimal
+
+            st.dataframe(
+                top_df[display_cols].style.format(fmt),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            top_excel = to_excel_bytes(
+                top_df[display_cols],
+                sheet_name="Top opportunities"
+            )
+
+            st.download_button(
+                label="Download top-liste",
+                data=top_excel,
+                file_name=f"top_{top_n}_opportunities.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+    except Exception as e:
+        st.error(f"Kunne ikke lave top-liste: {e}")
