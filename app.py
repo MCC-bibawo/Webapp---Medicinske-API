@@ -765,7 +765,7 @@ with tab_topliste:
         growth_weight = st.slider("Vægt: vækst", 0, 100, 20)
 
     with w4:
-        aip_weight = st.slider("Vægt: AIP", 0, 100, 15)
+        aip_weight = st.slider("Vægt: AIP", 0, 100, 0)
 
     if st.button("Lav topliste", key="make_shortlist_toplist"):
         with st.spinner("Bygger markedstabel uden API..."):
