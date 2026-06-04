@@ -78,8 +78,6 @@ def build_shortlist_without_api(
     - omsætning
     - vækst
     - antal pakninger
-
-    Returnerer shortlist + navnet på vækstkolonnen.
     """
 
     out = market_df.copy()
@@ -102,10 +100,18 @@ def build_shortlist_without_api(
     if revenue_col in out.columns:
         out = out[out[revenue_col].fillna(0) >= min_revenue]
 
-    # Grov score uden API
-    out["Shortlist score omsætning"] = minmax_score(out[revenue_col]) if revenue_col in out.columns else 50
-    out["Shortlist score vækst"] = minmax_score(out[growth_col].fillna(0)) if growth_col in out.columns else 50
-    out["Shortlist score antal"] = minmax_score(out[quantity_col]) if quantity_col in out.columns else 50
+    if out.empty:
+        return out, growth_col
+
+    out["Shortlist score omsætning"] = (
+        minmax_score(out[revenue_col]) if revenue_col in out.columns else 50
+    )
+    out["Shortlist score vækst"] = (
+        minmax_score(out[growth_col].fillna(0)) if growth_col in out.columns else 50
+    )
+    out["Shortlist score antal"] = (
+        minmax_score(out[quantity_col]) if quantity_col in out.columns else 50
+    )
 
     out["Shortlist Score"] = (
         out["Shortlist score omsætning"] * 0.55
@@ -138,22 +144,47 @@ def build_final_opportunity_score(
     revenue_col = f"Omsætning {revenue_year}"
 
     if "Konkurrenter" in out.columns:
-    out["Konkurrenter"] = pd.to_numeric(out["Konkurrenter"], errors="coerce").fillna(0)
+        out["Konkurrenter"] = pd.to_numeric(
+            out["Konkurrenter"],
+            errors="coerce"
+        ).fillna(0)
 
-    if min_competitors is not None:
-        out = out[out["Konkurrenter"] >= min_competitors]
+        if min_competitors is not None:
+            out = out[out["Konkurrenter"] >= min_competitors]
 
-    if max_competitors is not None:
-        out = out[out["Konkurrenter"] <= max_competitors]
+        if max_competitors is not None:
+            out = out[out["Konkurrenter"] <= max_competitors]
+
+    if out.empty:
+        return out
 
     for col in ["Konkurrenter", "AIP", revenue_col, growth_col]:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
 
-    out["Score konkurrence"] = competitor_score(out["Konkurrenter"]) if "Konkurrenter" in out.columns else 50
-    out["Score omsætning"] = minmax_score(out[revenue_col]) if revenue_col in out.columns else 50
-    out["Score vækst"] = minmax_score(out[growth_col].fillna(0)) if growth_col in out.columns else 50
-    out["Score AIP"] = minmax_score(out["AIP"].fillna(0)) if "AIP" in out.columns else 50
+    out["Score konkurrence"] = (
+        competitor_score(out["Konkurrenter"])
+        if "Konkurrenter" in out.columns
+        else 50
+    )
+
+    out["Score omsætning"] = (
+        minmax_score(out[revenue_col])
+        if revenue_col in out.columns
+        else 50
+    )
+
+    out["Score vækst"] = (
+        minmax_score(out[growth_col].fillna(0))
+        if growth_col in out.columns
+        else 50
+    )
+
+    out["Score AIP"] = (
+        minmax_score(out["AIP"].fillna(0))
+        if "AIP" in out.columns
+        else 50
+    )
 
     total_weight = competitor_weight + revenue_weight + growth_weight + aip_weight
 
@@ -170,6 +201,7 @@ def build_final_opportunity_score(
     out["Opportunity Score"] = out["Opportunity Score"].round(1)
 
     out = out.sort_values("Opportunity Score", ascending=False, na_position="last")
+
     out.insert(0, "Rank", range(1, len(out) + 1))
 
     return out
