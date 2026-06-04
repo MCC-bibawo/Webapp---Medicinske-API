@@ -263,7 +263,7 @@ current_key = (
     exact_match
 )
 
-tab_overblik, tab_analyse, tab_topliste = st.tabs(["Overblik", "Analyse", Topliste])
+tab_overblik, tab_analyse, tab_topliste = st.tabs(["Overblik", "Analyse", "Topliste"])
 
 
 with tab_overblik:
