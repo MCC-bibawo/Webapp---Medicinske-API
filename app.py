@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from logic import (build_market_base_table_from_clean_data, build_table_from_clean_data, build_table_from_excel, clean_data, load_data,) 
-from analysis import build_top_opportunities
+from analysis import (build_final_opportunity_score, build_shortlist_without_api,)
 from medicin_api import get_aip_and_competitors
 
 DEFAULT_DATA_FILE = "data.xlsx"
@@ -710,41 +710,58 @@ with tab_topliste:
     st.subheader("Topliste")
 
     st.markdown(
-        "Denne topliste kigger på hele datafilen og rangerer pakninger ud fra "
-        "lav konkurrence, høj omsætning, vækst og AIP."
+        "Toplisten kigger på hele markedet. Først laves en hurtig shortlist uden API, "
+        "derefter hentes AIP og konkurrenter kun for shortlisten."
     )
 
     st.info(
-        "Toplisten bruger hele datafilen — ikke kun de stoffer der er valgt øverst. "
-        "Første kørsel kan tage noget tid, fordi der hentes AIP og konkurrentdata."
+        "Første kørsel kan tage lidt tid, men den bør være langt hurtigere end at hente "
+        "AIP og konkurrenter for hele markedet."
     )
 
-    st.markdown("### Indstillinger for topliste")
+    st.markdown("### Indstillinger")
 
-    top_col1, top_col2, top_col3, top_col4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
 
-    with top_col1:
+    with c1:
         top_n = st.selectbox(
             "Antal på toplisten",
             [10, 20, 50, 100],
             index=0
         )
 
-    with top_col2:
+    with c2:
+        shortlist_n = st.selectbox(
+            "Shortlist-størrelse før API",
+            [100, 250, 500, 1000],
+            index=1
+        )
+
+    with c3:
         revenue_year = st.selectbox(
             "Omsætningsår",
             ["2020", "2021", "2022", "2023", "2024", "2025"],
             index=5
         )
 
-    with top_col3:
+    with c4:
+        min_revenue_top = st.number_input(
+            "Minimum omsætning i valgt år (1.000)",
+            min_value=0.0,
+            value=0.0,
+            step=100.0
+        )
+
+    c5, c6, c7 = st.columns(3)
+
+    with c5:
         growth_start_year = st.selectbox(
             "Vækst startår",
             ["2020", "2021", "2022", "2023", "2024"],
             index=0
         )
 
-    with top_col4:
+    with c6:
         possible_end_years = [
             year for year in ["2021", "2022", "2023", "2024", "2025"]
             if int(year) > int(growth_start_year)
@@ -756,155 +773,138 @@ with tab_topliste:
             index=len(possible_end_years) - 1
         )
 
-    top_col5, top_col6, top_col7 = st.columns(3)
-
-    with top_col5:
+    with c7:
         growth_metric = st.selectbox(
             "Vækst måles på",
             ["Omsætning", "Antal pakninger"],
             index=0
         )
 
-    with top_col6:
-        min_revenue_top = st.number_input(
-            "Minimum omsætning i valgt år (1.000)",
-            min_value=0.0,
-            value=0.0,
-            step=100.0
-        )
+    max_competitors_top = st.number_input(
+        "Maks konkurrenter efter API-opslag",
+        min_value=0,
+        max_value=50,
+        value=5,
+        step=1
+    )
 
-    with top_col7:
-        max_competitors_top = st.number_input(
-            "Maks konkurrenter",
-            min_value=0,
-            max_value=50,
-            value=5,
-            step=1
-        )
-
-    st.markdown("### Vægte i scoremodellen")
+    st.markdown("### Vægte i endelig score")
 
     w1, w2, w3, w4 = st.columns(4)
 
     with w1:
-        competitor_weight = st.slider(
-            "Vægt: lav konkurrence",
-            min_value=0,
-            max_value=100,
-            value=35
-        )
+        competitor_weight = st.slider("Vægt: lav konkurrence", 0, 100, 35)
 
     with w2:
-        revenue_weight = st.slider(
-            "Vægt: omsætning",
-            min_value=0,
-            max_value=100,
-            value=30
-        )
+        revenue_weight = st.slider("Vægt: omsætning", 0, 100, 30)
 
     with w3:
-        growth_weight = st.slider(
-            "Vægt: vækst",
-            min_value=0,
-            max_value=100,
-            value=20
-        )
+        growth_weight = st.slider("Vægt: vækst", 0, 100, 20)
 
     with w4:
-        aip_weight = st.slider(
-            "Vægt: AIP",
-            min_value=0,
-            max_value=100,
-            value=15
-        )
+        aip_weight = st.slider("Vægt: AIP", 0, 100, 15)
 
-    if st.button("Lav topliste for hele markedet", key="build_market_toplist"):
-        with st.spinner("Bygger topliste for hele markedet. Det kan tage lidt tid første gang..."):
+    if st.button("Lav topliste", key="make_shortlist_toplist"):
+        with st.spinner("Bygger markedstabel uden API..."):
             try:
-                market_result = build_market_result(
-                    str(path_obj),
-                    exact_match=exact_match
+                market_base = build_market_base_result(str(path_obj))
+            except Exception as e:
+                st.error(f"Kunne ikke bygge markedstabel: {e}")
+                market_base = None
+
+        if market_base is not None and not market_base.empty:
+            with st.spinner("Finder shortlist uden API..."):
+                shortlist, growth_col = build_shortlist_without_api(
+                    market_base,
+                    shortlist_n=shortlist_n,
+                    revenue_year=revenue_year,
+                    growth_start_year=growth_start_year,
+                    growth_end_year=growth_end_year,
+                    growth_metric=growth_metric,
+                    min_revenue=min_revenue_top,
                 )
 
-                if market_result.empty:
-                    st.warning("Der blev ikke fundet data til toplisten.")
+            if shortlist.empty:
+                st.warning("Shortlisten blev tom. Prøv lavere minimum omsætning.")
+            else:
+                st.success(f"Shortlist lavet: {len(shortlist)} kandidater.")
+
+                with st.spinner("Henter AIP og konkurrenter for shortlisten..."):
+                    enriched_shortlist = enrich_shortlist_with_api(shortlist)
+
+                top_df = build_final_opportunity_score(
+                    enriched_shortlist,
+                    revenue_year=revenue_year,
+                    growth_col=growth_col,
+                    competitor_weight=competitor_weight,
+                    revenue_weight=revenue_weight,
+                    growth_weight=growth_weight,
+                    aip_weight=aip_weight,
+                    max_competitors=max_competitors_top,
+                )
+
+                top_df = top_df.head(top_n).copy()
+
+                if top_df.empty:
+                    st.warning("Ingen kandidater matcher de endelige kriterier.")
                 else:
-                    top_df = build_top_opportunities(
-                        market_result,
-                        top_n=top_n,
-                        revenue_year=revenue_year,
-                        growth_start_year=growth_start_year,
-                        growth_end_year=growth_end_year,
-                        growth_metric=growth_metric,
-                        annualized_growth=True,
-                        competitor_weight=competitor_weight,
-                        revenue_weight=revenue_weight,
-                        growth_weight=growth_weight,
-                        aip_weight=aip_weight,
-                        min_revenue=min_revenue_top,
-                        max_competitors=max_competitors_top,
+                    revenue_col = f"Omsætning {revenue_year}"
+                    quantity_col = f"Antal pakninger {revenue_year}"
+
+                    display_cols = [
+                        "Rank",
+                        "Opportunity Score",
+                        "Virksomt stof",
+                        "Dosageform",
+                        "Styrke",
+                        "Pakningstørrelse",
+                        quantity_col,
+                        "AIP",
+                        "Konkurrenter",
+                        revenue_col,
+                        growth_col,
+                        "Shortlist Score",
+                        "Score konkurrence",
+                        "Score omsætning",
+                        "Score vækst",
+                        "Score AIP",
+                    ]
+
+                    display_cols = [
+                        col for col in display_cols
+                        if col in top_df.columns
+                    ]
+
+                    fmt = make_format_dict(top_df)
+
+                    for col in [
+                        "Opportunity Score",
+                        "Shortlist Score",
+                        "Score konkurrence",
+                        "Score omsætning",
+                        "Score vækst",
+                        "Score AIP",
+                        growth_col,
+                    ]:
+                        if col in top_df.columns:
+                            fmt[col] = dk_format_1_decimal
+
+                    st.success(f"Top {len(top_df)} muligheder fundet.")
+
+                    st.dataframe(
+                        top_df[display_cols].style.format(fmt),
+                        use_container_width=True,
+                        hide_index=True
                     )
 
-                    if top_df.empty:
-                        st.warning("Ingen rækker matcher kriterierne.")
-                    else:
-                        competitor_col = (
-                            "Konkurrenter"
-                            if "Konkurrenter" in top_df.columns
-                            else "konkurrenter"
-                        )
+                    top_excel = to_excel_bytes(
+                        top_df[display_cols],
+                        sheet_name="Topliste"
+                    )
 
-                        growth_col = f"Årlig vækst {growth_start_year}-{growth_end_year} (%)"
-
-                        display_cols = [
-                            "Rank",
-                            "Opportunity Score",
-                            "Virksomt stof",
-                            "Dosageform",
-                            "Styrke",
-                            "Pakningstørrelse",
-                            f"Antal pakninger {revenue_year}",
-                            "AIP",
-                            competitor_col,
-                            f"Omsætning {revenue_year}",
-                            growth_col,
-                            "Score konkurrence",
-                            "Score omsætning",
-                            "Score vækst",
-                            "Score AIP",
-                        ]
-
-                        display_cols = [
-                            col for col in display_cols
-                            if col in top_df.columns
-                        ]
-
-                        fmt = make_format_dict(top_df)
-                        fmt["Opportunity Score"] = dk_format_1_decimal
-                        fmt["Score konkurrence"] = dk_format_1_decimal
-                        fmt["Score omsætning"] = dk_format_1_decimal
-                        fmt["Score vækst"] = dk_format_1_decimal
-                        fmt["Score AIP"] = dk_format_1_decimal
-
-                        st.success(f"Top {len(top_df)} muligheder fundet på tværs af hele markedet.")
-
-                        st.dataframe(
-                            top_df[display_cols].style.format(fmt),
-                            use_container_width=True,
-                            hide_index=True
-                        )
-
-                        top_excel = to_excel_bytes(
-                            top_df[display_cols],
-                            sheet_name="Top opportunities"
-                        )
-
-                        st.download_button(
-                            label="Download topliste",
-                            data=top_excel,
-                            file_name=f"top_{top_n}_hele_markedet.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        )
-
-            except Exception as e:
-                st.error(f"Kunne ikke lave topliste: {e}")
+                    st.download_button(
+                        label="Download topliste",
+                        data=top_excel,
+                        file_name=f"top_{top_n}_marked.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
