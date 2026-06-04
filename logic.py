@@ -329,14 +329,19 @@ def build_market_base_table_from_clean_data(df_clean: pd.DataFrame) -> pd.DataFr
 
 def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Beriger en shortlist med AIP og Konkurrenter ved at bruge præcis samme
-    API-logik som den oprindelige Overblik-tabel.
+    Beriger en shortlist med AIP og Konkurrenter ved at bruge samme API-logik
+    som den oprindelige overblikstabel.
 
-    Forventede kolonner i shortlist_df:
+    Shortlisten kommer typisk med:
     - Virksomt stof
     - Dosageform
     - Styrke
     - Pakningstørrelse
+
+    enrich_with_api forventer:
+    - Doseringsform
+    - Styrke
+    - Pakningsstørrelse_norm
     """
 
     if shortlist_df is None or shortlist_df.empty:
@@ -351,7 +356,10 @@ def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame) -> pd.DataFr
 
     missing = [c for c in required_cols if c not in shortlist_df.columns]
     if missing:
-        raise ValueError(f"Shortlist mangler kolonner: {missing}")
+        raise ValueError(
+            f"Shortlist mangler kolonner: {missing}. "
+            f"Kolonner fundet: {list(shortlist_df.columns)}"
+        )
 
     all_parts = []
 
@@ -360,23 +368,33 @@ def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame) -> pd.DataFr
 
         tmp = part.copy()
 
-        # Omdøb til de kolonnenavne som den oprindelige enrich_with_api forventer
-        tmp = tmp.rename(columns={
-            "Dosageform": "Doseringsform",
-            "Pakningstørrelse": "Pakningsstørrelse_norm",
-        })
+        # Gem original kolonneorden/navne til sidst
+        original_cols = list(tmp.columns)
+
+        # Lav de interne kolonnenavne, som enrich_with_api bruger
+        tmp["Doseringsform"] = tmp["Dosageform"]
+        tmp["Pakningsstørrelse_norm"] = tmp["Pakningstørrelse"]
 
         enriched = enrich_with_api(tmp, active_name)
 
-        # Omdøb tilbage til appens visningsnavne
-        enriched = enriched.rename(columns={
-            "Doseringsform": "Dosageform",
-            "Pakningsstørrelse_norm": "Pakningstørrelse",
-        })
+        # Sørg for at visningskolonnerne stadig findes bagefter
+        if "Dosageform" not in enriched.columns and "Doseringsform" in enriched.columns:
+            enriched["Dosageform"] = enriched["Doseringsform"]
+
+        if "Pakningstørrelse" not in enriched.columns and "Pakningsstørrelse_norm" in enriched.columns:
+            enriched["Pakningstørrelse"] = enriched["Pakningsstørrelse_norm"]
 
         all_parts.append(enriched)
 
     if not all_parts:
         return pd.DataFrame()
 
-    return pd.concat(all_parts, ignore_index=True)
+    out = pd.concat(all_parts, ignore_index=True)
+
+    # Fjern interne hjælpekolonner hvis du ikke vil vise dem
+    out = out.drop(
+        columns=["Doseringsform", "Pakningsstørrelse_norm"],
+        errors="ignore"
+    )
+
+    return out
