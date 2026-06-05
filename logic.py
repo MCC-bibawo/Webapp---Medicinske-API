@@ -181,6 +181,7 @@ def enrich_with_api(table_df: pd.DataFrame, active_name: str) -> pd.DataFrame:
     result = pd.concat([table_df, enriched], axis=1)
 
     ordered_cols = [
+        "Virksomt stof"
         "Dosageform",
         "Styrke",
         "Pakningstørrelse",
