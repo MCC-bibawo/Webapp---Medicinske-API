@@ -378,6 +378,7 @@ def enrich_shortlist_using_overview_api(shortlist_df: pd.DataFrame, progress_cal
         tmp["Pakningsstørrelse_norm"] = tmp["Pakningstørrelse"]
 
         enriched = enrich_with_api(tmp, active_name)
+        enriched["Virksomt stof"] = active_name
 
         if "Dosageform" not in enriched.columns and "Doseringsform" in enriched.columns:
             enriched["Dosageform"] = enriched["Doseringsform"]
