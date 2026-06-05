@@ -66,12 +66,14 @@ def build_result_for_substances(
 
     result = pd.concat(all_results, ignore_index=True)
 
-    sort_cols = ["Virksomt stof"]
-    ascending = [True]
+    result = result.sort_values(
+        ["Virksomt stof", "Antal pakninger 2025"],
+        ascending=[True, False]
+    )
 
-    if "Antal pakninger 2025" in result.columns:
-        sort_cols.append("Antal pakninger 2025")
-        ascending.append(False)
+    if "Virksomt stof" in result.columns:
+        cols = ["Virksomt stof"] + [c for c in result.columns if c != "Virksomt stof"]
+        result = result[cols]
 
     result = result.sort_values(
         sort_cols,
