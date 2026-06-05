@@ -651,7 +651,8 @@ with tab_analyse:
                             "Analysen bruger samme datagrundlag som overblikket. "
                             "Antal pakninger og omsætning er angivet i 1.000."
                         )
-
+                        st.write(top_df.columns.tolist())
+                        
                         st.dataframe(
                             opportunities[display_cols].style.format(fmt),
                             use_container_width=True,
